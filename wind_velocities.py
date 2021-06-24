@@ -88,6 +88,9 @@ class DataCleaner:
 """
 
 a = DataCleaner("S_H_e0_ESHL" , "2a_testo")
+print(a.wind_velocity_indoor())
+print(a.wind_velocity_outdoor())
+
 #%%
 
 
