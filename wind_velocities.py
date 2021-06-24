@@ -20,7 +20,7 @@ def prYellow(skk): print("\033[33;1;m {}\033[00m" .format(skk))
 class DataCleaner:
     
     def __init__(self, experiment = "S_I_e0_ESHL", sensor_name = "1a_testo", column_name = 'hw_m/sec'):
-        self.times = pd.read_excel("C:/Users/Raghavakrishna/OneDrive - bwedu/5_PythonFiles/Wind Velocities/master_time_sheet.xlsx")
+        self.times = pd.read_excel("master_time_sheet.xlsx")
         self.experiment = experiment
         self.sensor_name = sensor_name
         self.column_name = column_name
@@ -87,7 +87,7 @@ class DataCleaner:
     Cheers
 """
 
-a = DataCleaner("S_I_e0_ESHL" , "2a_testo")
+a = DataCleaner("S_H_e0_ESHL" , "2a_testo")
 #%%
 
 
