@@ -27,7 +27,7 @@ class DataCleaner:
         self.sensor_name = sensor_name
         self.column_name = column_name
         self.engine = create_engine("mysql+pymysql://wojtek:Password#102@wojtek.mysql.database.azure.com/",pool_pre_ping=True)
-        self.engine = engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
+        # self.engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
 
         self.database = self.times[self.times["experiment"] == self.experiment].iloc[0,3]
         self.t0 = self.times[self.times["experiment"] == experiment].iloc[0,1]
