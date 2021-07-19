@@ -25,11 +25,12 @@ class DataCleaner:
     
     def __init__(self, experiment = "S_I_e0_ESHL", sensor_name = "1a_testo", column_name = 'hw_m/sec'):
         self.times = pd.read_excel("master_time_sheet.xlsx")
+        self.input = pd.read_excel("master_time_sheet.xlsx", sheet_name = "inputs")
         self.experiment = experiment
         self.sensor_name = sensor_name
         self.column_name = column_name
-        self.engine = create_engine("mysql+pymysql://wojtek:Password#102@wojtek.mysql.database.azure.com/",pool_pre_ping=True)
-        # self.engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
+        # self.engine = create_engine("mysql+pymysql://wojtek:Password#102@wojtek.mysql.database.azure.com/",pool_pre_ping=True)
+        self.engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
 
         self.database = self.times[self.times["experiment"] == self.experiment].iloc[0,3]
         self.t0 = self.times[self.times["experiment"] == experiment].iloc[0,1]
@@ -38,7 +39,9 @@ class DataCleaner:
         self.calibration = self.times[self.times["experiment"] == experiment].iloc[0,5]
         
         self.t0_20 = self.t0 - timedelta(minutes = 20)
-        self.tn_20 = self.tn + timedelta(minutes = 20)                                
+        self.tn_20 = self.tn + timedelta(minutes = 20)   
+
+        self.tau_nom = self.input.loc[self.input["experiment"] == self.experiment]["tau_nom"].iat[0]                             
         
     def wind_velocity_indoor(self):
         
@@ -195,7 +198,7 @@ class DataCleaner:
         
     
     
-    def mean_curve(self):
+    def mean_curve(self, plot = False):
         self.names = pd.read_sql_query('SHOW TABLES FROM {}'.format(self.database), con = self.engine)
         self.names = self.names.iloc[:,0].to_list()
         self.new_names = [x for x in self.names if (x not in self.exclude)]
@@ -210,9 +213,7 @@ class DataCleaner:
         accuracy6 = 0.03 # Citavi Title: Testo AG
         
         
-        
-        
-        self.cdf_list = []
+        self.cdf_list, self.df_tau, self.tau_hr  = [], [], []
         for self.table in self.new_names:
             self.cdf1 = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database, self.table, self.t0, self.tn), con = self.engine) 
             self.cdf2 = self.cdf1.loc[:,["datetime", "CO2_ppm"]]
@@ -231,39 +232,97 @@ class DataCleaner:
             self.cdf2.loc[:,"CO2_ppm"] = self.cdf2.loc[:,"CO2_ppm"] - a.aussen()["meanCO2"]
             
             self.cdf2.columns = ["datetime", str(self.table)]
-            self.cdf2 = self.cdf2.set_index("datetime")
-            self.cdf_list.append(self.cdf2)
-            self.mega_cdf = pd.concat(self.cdf_list,axis = 1).interpolate(method = "linear")
-            # self.mega_cdf.columns = self.new_names
-            self.mega_cdf["mean_delta"] = self.mega_cdf.mean(axis = 1)
+            self.cdf2["log"] = np.log(self.cdf2[str(self.table)])
+            self.diff_sec = (self.cdf2["datetime"][1] - self.cdf2["datetime"][0]).seconds
+            self.cdf2["s_meas"] =  np.sqrt(np.square((self.cdf2[str(self.table)] * accuracy2)) 
+                                   + np.square(accuracy1) + np.square((self.cdf2[str(self.table)] * accuracy4)) 
+                                   + np.square(accuracy3) + np.square((self.cdf2[str(self.table)] * accuracy6)) 
+                                   + np.square(accuracy5))
+            self.ns_meas = self.cdf2['s_meas'].mean()
+            self.n = len(self.cdf2['s_meas'])
+            
+            ### ISO 16000-8 option to calculate slope (defined to be calculated by Spread-Sheat/Excel)
+            self.cdf2["runtime"] = np.arange(0,len(self.cdf2) * self.diff_sec, self.diff_sec)
+            
+            self.cdf2["t-te"] = self.cdf2["runtime"] - self.cdf2["runtime"][len(self.cdf2)-1]
+            
+            self.cdf2["lnte/t"] = self.cdf2["log"] - self.cdf2["log"][len(self.cdf2)-1]
+            
+            self.cdf2["slope"] = self.cdf2["lnte/t"] / self.cdf2["t-te"]
+            self.slope_iso = self.cdf2["slope"].mean()
+            
+            ### More acurate option to calculate the solpe of each (sub-)curve
+            self.x1 = self.cdf2["runtime"].values
+            self.y1 = self.cdf2["log"].values
+            from scipy.stats import linregress
+            self.slope = linregress(self.x1,self.y1)[0]
+            ###
+            self.cdf2.loc[[len(self.cdf2)-1], "slope"] = abs(self.slope)
+            
+            self.sumconz = self.cdf2[str(self.table)].iloc[1:-1].sum()
+            
+            self.tail = self.cdf2[str(self.table)][len(self.cdf2)-1]/abs(self.slope)
+            
+            self.area_sup_1= (self.diff_sec * (self.cdf2[str(self.table)][0]/2 + self.sumconz +self.cdf2[str(self.table)][len(self.cdf2)-1]/2))
+            from numpy import trapz
+            self.area_sup_2 = trapz(self.cdf2[str(self.table)].values, dx=self.diff_sec) # proof that both methods have same answer
+            
+            self.a_rest = self.cdf2[str(self.table)].iloc[-1]/abs(self.slope)
+            self.a_tot = self.area_sup_2 + self.a_rest
+            
+            self.sa_num = self.ns_meas * (self.diff_sec) * ((self.n - 1)/np.sqrt(self.n)) # Taken from DIN ISO 16000-8:2008-12, Equation D2 units are cm3.m-3.sec
+            self.s_lambda = self.cdf2["slope"][:-1].std()/abs(self.cdf2["slope"][:-1].mean())
+            self.s_phi_e = self.cdf2["slope"][:-1].std()/abs(self.cdf2["slope"].iloc[-1])
     
-        import plotly.io as pio
-        
-        pio.renderers.default='browser'
-        pd.options.plotting.backend = "matplotlib"
-        #######################################################################
-        pd.options.plotting.backend = "plotly"
-
-        import plotly.io as pio
-        
-        pio.renderers.default='browser'
-        import plotly.express as px
-        
-       
-        fig = px.line(self.mega_cdf, x=self.mega_cdf.index, y=self.mega_cdf.columns, title="mean of {}".format(self.experiment))
-
-        fig.show()
-        
-        
-        import plotly.io as pio
-        
-        pio.renderers.default='browser'
-        pd.options.plotting.backend = "matplotlib"
-        
-        return self.mega_cdf
+            self.s_rest = np.sqrt(pow(self.s_lambda,2) + pow(self.s_phi_e,2))
+            self.sa_rest = self.s_rest * self.a_rest
+            self.s_area = np.sqrt(pow(self.sa_num,2) + pow(self.sa_rest,2))/self.a_tot
+            self.s_total = np.sqrt(pow(self.s_area,2) + pow(0.05,2))
     
-        
-        
+    
+            self.tau = (self.area_sup_2 + self.tail)/self.cdf2[str(self.table)][0]
+            
+            self.tau_hr.append(self.tau/3600)
+            self.cdf2["tau_hr"] = self.tau/3600
+            self.cdf2.loc[:, "s_total"] = self.s_total
+
+            self.df_tau.append(self.cdf2)
+            
+            self.cdf3 = self.cdf2.loc[:, ["datetime", str(self.table)]]
+            self.cdf3 = self.cdf3.set_index("datetime")
+            self.cdf_list.append(self.cdf3)
+        self.mega_cdf = pd.concat(self.cdf_list,axis = 1).interpolate(method = "linear")
+        # self.mega_cdf.columns = self.new_names
+        self.mega_cdf["mean_delta"] = self.mega_cdf.mean(axis = 1)
+        # self.mega_cdf = self.mega_cdf.set_index("datetime")
+    
+        if plot:
+            import plotly.io as pio
+            
+            pio.renderers.default='browser'
+            pd.options.plotting.backend = "matplotlib"
+            #######################################################################
+            pd.options.plotting.backend = "plotly"
+    
+            import plotly.io as pio
+            
+            pio.renderers.default='browser'
+            import plotly.express as px
+            
+           
+            fig = px.line(self.mega_cdf, x=self.mega_cdf.index, y=self.mega_cdf.columns, title="mean of {}".format(self.experiment))
+    
+            fig.show()
+            
+            
+            import plotly.io as pio
+            
+            pio.renderers.default='browser'
+            pd.options.plotting.backend = "matplotlib"
+            #self.df_tau, self.mega_cdfv
+        return  np.mean(self.tau_hr) , self.df_tau, self.mega_cdf
+    
+ 
         
         
 #%%
@@ -276,20 +335,69 @@ class DataCleaner:
     Cheers
 """
 
-a = DataCleaner("S_H_e0_ESHL" , "2a_testo")
+a = DataCleaner("W_H_e0_ESHL" , "2a_testo")
 # print(a.wind_velocity_indoor())
 # print(a.wind_velocity_outdoor())
-b = a.mean_curve()
-# print(b)
+b = a.mean_curve(True)
+
+
+
+#%%
+d = a.mega_cdf.loc[:,["mean_delta"]]
+d['mean_delta_norm'] = d["mean_delta"]/d["mean_delta"].iat[0]
+
+
+d["runtime"] = np.arange(0,len(d) * a.diff_sec, a.diff_sec)
+
+d["min"] = d["runtime"]/(np.mean(a.tau_nom) * 3600)
+d["min"] = 1 - d["min"]
+
+slope = 1/(np.mean(a.tau_hr) * 3600)
+
+
+
+
+#%%%
+
+fig, ax = plt.subplots()
+
+
+def func(x, a, b):
+    return a * np.exp(-b * x)
+
+
+y = func(d["runtime"].values, 1, slope)
+
+
+slope_50 = 1/(a.tau_nom *3600)
+y_50 = func(d["runtime"].values, 1, slope_50)
+d["ea_50"] = y_50
+d["ea_50_max"] = d[["min", "ea_50"]].max(axis = 1)
+
+d["mean_delta_norm_max"] = d[["min", "mean_delta_norm"]].max(axis = 1)
+
+
+
+ax.plot(d["runtime"], d["ea_50_max"].values, label = "50 % efficiency (estimated)")
+ax.plot(d["runtime"], d["mean_delta_norm_max"].values, label = "{} % efficiency (measured)".format(round(a.tau_nom/(np.mean(a.tau_hr)*2) * 100) ))
+ax.plot(d["runtime"], d["min"].values, label = "maximum effieiency (estimated)")
+
+
+
+ax.set_xlabel("time (sec)")
+ax.set_ylabel("CO2 (normalized)")
+
+ax.set_title("Decay curves for {}".format(a.experiment))
+ax.legend()
+
 
 #%%
 
-# a = ["apple", "carrot", "lemon"]
-# b = ["pineapple", "apple", "tomato"]
 
-# new_list = [x for x in a if (x not in b)]
 
-# print(new_list)
+
+
+
 #%%
 
 
@@ -297,6 +405,6 @@ b = a.mean_curve()
 
 
 
-
+#%%
 
 
