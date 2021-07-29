@@ -9,23 +9,56 @@ Created on Thu Jun 24 13:28:14 2021
 import pandas as pd
 from datetime import timedelta
 import datetime as dt
+import statistics
+import datetime
 
 from sqlalchemy import create_engine
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.units as munits
+
+
 
 def prRed(skk): print("\033[31;1;m {}\033[00m" .format(skk))
 def prYellow(skk): print("\033[33;1;m {}\033[00m" .format(skk))
-# engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
+engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
 
 
 #%%
 
-class DataCleaner:
+class CBO_ESHL:
     
     def __init__(self, experiment = "S_I_e0_ESHL", sensor_name = "1a_testo", column_name = 'hw_m/sec'):
-        self.times = pd.read_excel("master_time_sheet.xlsx")
-        self.input = pd.read_excel("master_time_sheet.xlsx", sheet_name = "inputs")
+        
+        """
+        Takes 3 inputs some of them are not necessary for certain methods.
+
+        Input Parameters
+        ----------
+            experiment : str 
+                The name of the experiment available in the master_time_sheet.xlsx or in my thesis.
+            sensor_name : str
+                the type of nomenclature used to describe Testo sensors. This 
+                input is required to evaluate the Testo data like wind speed
+            column_name : str
+                The column name used when saving testo data. the column name 
+                is also an indication of the units used for the measured parameter.
+                This alrady describes what sensor is measuring.
+                
+        Imported Parameters
+        ----------
+            t0 : datetime 
+                The actual start of the experiment.
+            tn : datetime
+                The approximate end of the experiemnt.
+            tau_nom : float
+                The nominal time constant of the measurement obtained from 
+                master_time_sheet.xlsx
+        """
+        excel_sheet = "C:/Users/Raghavakrishna/OneDrive - bwedu/5_PythonFiles/ESHL_CBo_Post_Processing/master_time_sheet.xlsx"
+        self.times = pd.read_excel(excel_sheet, sheet_name = "Sheet1")
+        self.input = pd.read_excel(excel_sheet, sheet_name = "inputs")
         self.experiment = experiment
         self.sensor_name = sensor_name
         self.column_name = column_name
@@ -37,6 +70,8 @@ class DataCleaner:
         self.tn = self.times[self.times["experiment"] == experiment].iloc[0,2]
         self.exclude = self.times[self.times["experiment"] == experiment].iloc[0,4].split(",")
         self.calibration = self.times[self.times["experiment"] == experiment].iloc[0,5]
+        self.wall_database = self.times[self.times["experiment"] == experiment].iloc[0,6]
+        self.testos = ["1a_testo","2a_testo","3a_testo","4a_testo"]
         
         self.t0_20 = self.t0 - timedelta(minutes = 20)
         self.tn_20 = self.tn + timedelta(minutes = 20)   
@@ -44,7 +79,20 @@ class DataCleaner:
         self.tau_nom = self.input.loc[self.input["experiment"] == self.experiment]["tau_nom"].iat[0]                             
         
     def wind_velocity_indoor(self):
-        
+        """
+        Prints the person's name and age.
+
+        If the argument 'additional' is passed, then it is appended after the main info.
+
+        Parameters
+        ----------
+        additional : str, optional
+            More info to be displayed (default is None)
+
+        Returns
+        -------
+        None
+        """
         self.df1 = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database, self.sensor_name, self.t0_20, self.tn_20), con = self.engine) 
         self.df2 = self.df1.loc[:, ["datetime", "hw_m/sec"]]
         self.df2 = self.df2.set_index("datetime")
@@ -88,13 +136,36 @@ class DataCleaner:
         return self.res
     
 
-    def aussen(self):
+    def aussen(self, plot = False, save = False):
+        """
+        This method calculates the outdoor CO2 concentration from the HOBO sensor
+        ALso this produces a graph of outdoor CO2 data which is rolled for 120 seconds
+
+        Parameters
+        ----------
+        plot : BOOL, optional
+            if True displays a graph. The default is False.
+        save : BOOL, optional
+            If True saves in the current directory. The default is False. 
+            You can also change the plot saving and rendering settings in the code
+
+        Returns
+        -------
+        dictionary
+            The dictionary contains the mean , std , max and min of CO2 for the 
+            experimental period.
+
+        """
         if self.experiment == "S_I_e0_Herdern" or self.experiment == "S_I_e1_Herdern":
             self.Cout = {'meanCO2': 445.1524174626867,
                     'sgm_CO2': 113.06109664245112,
                     'maxCO2': 514.3716999999999,
                     'minCO2': 373.21639999999996}
             self.cout_mean, self.cout_max, self.cout_min = 445.1524174626867, 514.3716999999999, 373.21639999999996
+            
+            if plot:
+                print("The outdoor plot for this experiment is missing due to lack of data")
+            
             return self.Cout
         else:
             
@@ -130,6 +201,9 @@ class DataCleaner:
                 ''' The imported sql data is cleaned and columns are renamed to suit to out calculation'''
                 self.sensor_df3 = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database, "außen", self.t0, self.tn) , self.engine).drop('index', axis =1)
                 self.sensor_df3['CO2_ppm_reg'] = self.sensor_df3.eval(res.loc[0, "equation"])    
+                self.sensor_df3_plot = self.sensor_df3.copy()
+                
+                
                 self.sensor_df3 = self.sensor_df3.rename(columns = {'CO2_ppm':'CO2_ppm_original', 'CO2_ppm_reg': 'C_CO2 in ppm'})
                 self.sensor_df3 = self.sensor_df3.drop_duplicates(subset=['datetime'])
                 self.sensor_df3 = self.sensor_df3.loc[:, ["datetime", "C_CO2 in ppm", "CO2_ppm_original"]]
@@ -148,6 +222,78 @@ class DataCleaner:
                 x = self.sensor_df3["datetime"][2] - self.sensor_df3["datetime"][1]
                 self.sec3 = int(x.total_seconds())
                 
+                if plot:
+                    
+                    self.sensor_df3_plot = self.sensor_df3_plot.loc[:,['datetime', 'temp_°C', 'RH_%rH', 'CO2_ppm_reg']]
+                    self.sensor_df3_plot = self.sensor_df3_plot.set_index("datetime")
+                    self.sensor_df3_plot = self.sensor_df3_plot.rolling(int(120/self.sec3)).mean()
+                    def make_patch_spines_invisible(ax):
+                        ax.set_frame_on(True)
+                        ax.patch.set_visible(False)
+                        for sp in ax.spines.values():
+                            sp.set_visible(False)
+                    
+
+                    
+                    fig, host = plt.subplots()
+                    fig.subplots_adjust(right=0.75)
+                    
+                
+                    
+                    
+                    
+                    par1 = host.twinx()
+                    par2 = host.twinx()
+                    
+                    # Offset the right spine of par2.  The ticks and label have already been
+                    # placed on the right by twinx above.
+                    par2.spines["right"].set_position(("axes", 1.2))
+                    # Having been created by twinx, par2 has its frame off, so the line of its
+                    # detached spine is invisible.  First, activate the frame but make the patch
+                    # and spines invisible.
+                    make_patch_spines_invisible(par2)
+                    # Second, show the right spine.
+                    par2.spines["right"].set_visible(True)
+                    
+                    p1, = host.plot(self.sensor_df3_plot.index, self.sensor_df3_plot['temp_°C'], "b-", label="Temperature (°C)", linewidth=1)
+                    p2, = par1.plot(self.sensor_df3_plot.index, self.sensor_df3_plot['CO2_ppm_reg'], "r--", label="CO2 (ppm)", linewidth=1)
+                    p3, = par2.plot(self.sensor_df3_plot.index, self.sensor_df3_plot['RH_%rH'], "g-.", label="RH (%)", linewidth=1)
+                    
+                    # host.set_xlim(0, 2)
+                    host.set_ylim(0, 30)
+                    par1.set_ylim(0, 3000)
+                    par2.set_ylim(0, 100)
+                    
+                    host.set_xlabel("Time")
+                    host.set_ylabel("Temperature (°C)")
+                    par1.set_ylabel(r'$\mathrm{CO_2 (ppm)} $')
+                    par2.set_ylabel("RH (%)")
+                    
+                    host.yaxis.label.set_color(p1.get_color())
+                    par1.yaxis.label.set_color(p2.get_color())
+                    par2.yaxis.label.set_color(p3.get_color())
+                    
+                    tkw = dict(size=4, width=1.5)
+                    host.tick_params(axis='y', colors=p1.get_color(), **tkw)
+                    par1.tick_params(axis='y', colors=p2.get_color(), **tkw)
+                    par2.tick_params(axis='y', colors=p3.get_color(), **tkw)
+                    host.tick_params(axis='x', **tkw)
+                
+                    import matplotlib.dates as mdates
+                    locator = mdates.AutoDateLocator(minticks=3, maxticks=11)
+                    formatter = mdates.ConciseDateFormatter(locator)
+                    host.xaxis.set_major_locator(locator)
+                    host.xaxis.set_major_formatter(formatter)
+                    
+                    lines = [p1, p2, p3]
+                    
+                    plt.title("Outdoor data for {}".format(self.experiment))
+                    
+                    host.legend(lines, [l.get_label() for l in lines])
+                    if save:
+                        plt.savefig('{} outdoor data (HOBO)'.format(self.experiemnt), bbox_inches='tight', dpi=400)
+                
+                    plt.show()
                 """
                 Creating a runtime column with t0 as 0 or centre of the time axes
                 """
@@ -322,10 +468,197 @@ class DataCleaner:
             #self.df_tau, self.mega_cdfv
         return  np.mean(self.tau_hr) , self.df_tau, self.mega_cdf
     
- 
+    def decay_curve_comparison_plot(self, save = False):
+        """
+        This method produces a plot that shows the decay curve of the selected
+        experiment and corresponding curves if the experiment were to be a fully
+        mixed ventilation or ideal plug flow ventilation. 
+        
+        Run this method to see the graph it will make more sense
+
+        Parameters
+        ----------
+        save : BOOL, optional
+            if True saves the plot to the default directory. The default is False.
+
+        Returns
+        -------
+        figure
+            returns a figure.
+
+        """
+        self.d = self.mean_curve()[2].loc[:,["mean_delta"]]
+        self.d['mean_delta_norm'] = self.d["mean_delta"]/self.d["mean_delta"].iat[0]
+
+
+        self.d["runtime"] = np.arange(0,len(self.d) * self.diff_sec, self.diff_sec)
+        
+        self.d["min"] = self.d["runtime"]/(np.mean(self.tau_nom) * 3600)
+        self.d["min"] = 1 - self.d["min"]
+        
+        self.slope = 1/(np.mean(a.tau_hr) * 3600)
         
         
-#%%
+        self.fig, ax = plt.subplots()
+
+
+        def func(x, a, b):
+            return a * np.exp(-b * x)
+
+        self.slope_50 = 1/(a.tau_nom *3600)
+        y_50 = func(self.d["runtime"].values, 1, self.slope_50)
+        self.d["ea_50"] = y_50
+        self.d["ea_50_max"] = self.d[["min", "ea_50"]].max(axis = 1)
+        
+        self.d["mean_delta_norm_max"] = self.d[["min", "mean_delta_norm"]].max(axis = 1)
+        
+        
+        
+        ax.plot(self.d["runtime"], self.d["ea_50_max"].values, label = "50 % efficiency (estimated)")
+        ax.plot(self.d["runtime"], self.d["mean_delta_norm_max"].values, label = "{} % efficiency (measured)".format(round(self.tau_nom/(np.mean(self.tau_hr)*2) * 100) ))
+        ax.plot(self.d["runtime"], self.d["min"].values, label = "maximum effieiency (estimated)")
+        
+        
+        
+        ax.set_xlabel("time (sec)")
+        ax.set_ylabel("CO2 (normalized)")
+        
+        ax.set_title("Decay curves for {}".format(self.experiment))
+        ax.legend()
+
+        if save:
+            ax.savefig("{} decay curve comparison".format(self.experiment))
+        
+        return self.fig
+        
+    def outdoor_data(self):
+        """
+        This method calculates the mean , std, max and min of the parameters measured 
+        on the outdoor of the measurement site. 
+        The outdoor data comes from two sources. 1) from the HOBO sensor
+        2) From the weather station
+
+        Returns
+        -------
+        dataframe
+            The dataframe contains the summary of the parameters for the selected
+            experiment period
+
+        """
+        adf = pd.read_sql_query("SELECT * FROM weather.außen WHERE datetime BETWEEN '{}' AND '{}'".format(self.t0,self.tn), con = engine).drop("index", axis = 1).set_index("datetime")
+        wdf = pd.read_sql_query("SELECT * FROM weather.weather_all WHERE datetime BETWEEN '{}' AND '{}'".format(self.t0,self.tn), con = engine).set_index("datetime")
+
+        
+        
+        data = [
+                [adf['temp_°C'].mean(), adf['temp_°C'].std(), adf['temp_°C'].max(), adf['temp_°C'].min()], 
+                [adf['RH_%rH'].mean(), adf['RH_%rH'].std(), adf['RH_%rH'].max(), adf['RH_%rH'].min()],
+                [self.aussen()["meanCO2"], self.Cout["sgm_CO2"], self.Cout["maxCO2"], self.Cout["minCO2"]],
+                [wdf["Wind Speed, m/s"].mean(), wdf["Wind Speed, m/s"].std(), wdf["Wind Speed, m/s"].max(), wdf["Wind Speed, m/s"].min()],
+                [wdf["Gust Speed, m/s"].mean(), wdf["Gust Speed, m/s"].std(), wdf["Gust Speed, m/s"].max(), wdf["Gust Speed, m/s"].min()],
+                [wdf["Wind Direction"].mean(), wdf["Wind Direction"].std(), wdf["Wind Direction"].max(), wdf["Wind Direction"].min()],
+                [wdf["Temperature °C"].mean(), wdf["Temperature °C"].std(), wdf["Temperature °C"].max(), wdf["Temperature °C"].min()],
+                [wdf["RH %"].mean(), wdf["RH %"].std(), wdf["RH %"].max(), wdf["RH %"].min()]
+                ]
+       
+        self.outdoor_summary = pd.DataFrame(data = data, index = ["temp_°C","RH_%rH", "CO2_ppm", "Wind Speed, m/s","Gust Speed, m/s","Wind Direction", "Temperature °C", "RH %" ], columns = ["mean", "std", "max", "min"] )
+        
+        
+        return self.outdoor_summary
+        
+        
+    def indoor_data(self):
+        
+        self.names = pd.read_sql_query('SHOW TABLES FROM {}'.format(self.database), con = self.engine)
+        self.names = self.names.iloc[:,0].to_list()
+        self.new_names = [x for x in self.names if (x not in self.exclude)]
+        
+        
+        self.humidity = []
+    
+        for i in self.new_names:
+            self.hudf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database,i,self.t0,self.tn), con = engine).set_index("datetime").dropna()
+            if 'RH_%rH' in self.hudf.columns:
+                self.humidity.append(self.hudf["RH_%rH"].mean())
+        self.humidity = [x for x in self.humidity if x == x]
+        self.indoor_list = [[statistics.mean(self.humidity), statistics.stdev(self.humidity), max(self.humidity), min(self.humidity)]]
+        
+        for i in self.testos:
+            sdf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database.lower(),i,self.t0,self.tn), con = engine)
+
+            sdf = sdf.drop_duplicates(subset="datetime").set_index("datetime")
+            sdf = sdf.loc[:,["hw_m/sec"]].dropna()
+        self.indoor_list.append([sdf["hw_m/sec"].mean(), sdf["hw_m/sec"].std(), sdf["hw_m/sec"].max(), sdf["hw_m/sec"].min()])
+        
+        self.wadf = pd.read_sql_query("SELECT * FROM weather.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.wall_database,self.t0,self.tn), con = engine).set_index("datetime")
+
+        self.indoor_list.append([self.wadf.mean().mean(), self.wadf.values.std(ddof=1), self.wadf.values.max(), self.wadf.values.min()])
+
+        
+        self.indoor_summary = pd.DataFrame(data = self.indoor_list, index = ["RH_%rH", "hw_m/sec", "wall_temp_°C"], columns = ["mean", "std", "max", "min"] )
+
+        return self.indoor_summary
+        
+    def outdoor_windspeed_plot(self, save = False):
+        """
+        This method produces a plot for the outdoor wind speeds during the measurement
+
+        Parameters
+        ----------
+        save : BOOL, optional
+            If True , the plot is saved. The default is False.
+
+        Returns
+        -------
+        Figure.
+            
+        """
+        global df1
+        df1 = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND \
+                            '{}'".format("weather", "weather_all", self.t0,\
+                                self.tn), con = self.engine)
+        df1 = df1.loc[:,['datetime', 'Wind Speed, m/s', 'Gust Speed, m/s', 'Wind Direction']]
+        u = df1['Wind Direction'].to_numpy()
+    
+        U = np.sin(np.radians(u))
+        V = np.cos(np.radians(u))
+        wdf_plot = df1.set_index("datetime")
+        wdf_plot['u'] = U
+        wdf_plot['v'] = V
+        wdf_plot['y'] = 0
+    
+    
+        converter = mdates.ConciseDateConverter()
+        munits.registry[np.datetime64] = converter
+        munits.registry[datetime.date] = converter
+        munits.registry[datetime.datetime] = converter
+    
+        fig, ax1 = plt.subplots()
+        ax1.plot(wdf_plot['Gust Speed, m/s'],color = 'silver', label = 'Gust Speed', zorder=1)
+    
+    
+    
+        ax1.set_ylabel('Gust speed (m/sec)')
+        ax1.set_xlabel('Time')
+        # ax2 = ax1.twinx()
+        ax1.plot(wdf_plot['Wind Speed, m/s'], label = 'Wind Speed', zorder=2)
+        ax1.quiver(wdf_plot.index, wdf_plot['Wind Speed, m/s'], U,  V , width = 0.001, zorder=3)
+        ax1.set_ylabel('wind speed (m/sec) and direction (up is north)')
+    
+        plt.ylim(bottom=-0.1)
+        title = "Wind and Gust speed during {}".format(self.experiment)
+
+        plt.legend( loc='upper right')
+        plt.title(title)
+        if save:
+            plt.savefig(title + '.png', bbox_inches='tight', dpi=400)
+        plt.show()     
+       
+        return fig
+        
+        
+        
+#%% Execution of the Class
 """ Inputs needed: 
     1) experiment name (look master_time_sheet.xlsx) 
     2) The name of the sensor (1a_testo, 2a_testo, 3a_testo) 
@@ -335,60 +668,47 @@ class DataCleaner:
     Cheers
 """
 
-a = DataCleaner("W_H_e0_ESHL" , "2a_testo")
+a = CBO_ESHL("S_I_e0_ESHL" )
+# x = a.decay_curve_comparison_plot()
 # print(a.wind_velocity_indoor())
 # print(a.wind_velocity_outdoor())
-b = a.mean_curve(True)
+# b = a.mean_curve()
+# res = a.outdoor_windspeed_plot()
+
 
 
 
 #%%
-d = a.mega_cdf.loc[:,["mean_delta"]]
-d['mean_delta_norm'] = d["mean_delta"]/d["mean_delta"].iat[0]
 
+# i=0
+# wall_dict = {"ESHL_summer":"eshl_summer_wall", "ESHL_winter":"eshl_winter_wall", "CBo_summer":"cbo_summer_wall", "CBo_winter":"cbo_winter_wall"}
 
-d["runtime"] = np.arange(0,len(d) * a.diff_sec, a.diff_sec)
+# result_wall = pd.DataFrame(["Wall Summary"])
+# databases = ["ESHL_summer", "ESHL_winter", "CBo_summer", "CBo_winter"]
+# for database in databases:
+#     times = pd.read_excel('C:/Users/Raghavakrishna/OneDrive - bwedu/MA_Raghavakrishna/0_Evaluation/excel_files/Times_thesis.xlsx', sheet_name= database)
 
-d["min"] = d["runtime"]/(np.mean(a.tau_nom) * 3600)
-d["min"] = 1 - d["min"]
+#     choices = list(times['short name'])
+#     for experiment in choices:
+#         z = int(times[times['short name'] == experiment].index.values)
+#         Vdot_sheets = {"ESHL_summer":"ESHL_Vdot", "ESHL_winter":"ESHL_Vdot", "CBo_summer":"CBo_Vdot", "CBo_winter":"CBo_Vdot"}
+        
+        
+#         t0 = times.loc[z,"Start"]
+#         tn = times.loc[z,"End"]
 
-slope = 1/(np.mean(a.tau_hr) * 3600)
+# #%%
+#         schema = "weather"
+#         ''' this engine is used where ever connection is required to database'''
+#         engine = create_engine("mysql+pymysql://root:Password123@localhost/{}".format(schema),pool_pre_ping=True)
+        
+#         wadf = pd.read_sql_query("SELECT * FROM weather.{} WHERE datetime BETWEEN '{}' AND '{}'".format(wall_dict[database],t0,tn), con = engine).set_index("datetime")
+        
+        
+#         result_wall.loc[i+1,0] = experiment; result_wall.loc[i+1,1] = wadf.mean().mean();result_wall.loc[i+1,2] = wadf.mean().std()
+#         i = i+1
 
-
-
-
-#%%%
-
-fig, ax = plt.subplots()
-
-
-def func(x, a, b):
-    return a * np.exp(-b * x)
-
-
-y = func(d["runtime"].values, 1, slope)
-
-
-slope_50 = 1/(a.tau_nom *3600)
-y_50 = func(d["runtime"].values, 1, slope_50)
-d["ea_50"] = y_50
-d["ea_50_max"] = d[["min", "ea_50"]].max(axis = 1)
-
-d["mean_delta_norm_max"] = d[["min", "mean_delta_norm"]].max(axis = 1)
-
-
-
-ax.plot(d["runtime"], d["ea_50_max"].values, label = "50 % efficiency (estimated)")
-ax.plot(d["runtime"], d["mean_delta_norm_max"].values, label = "{} % efficiency (measured)".format(round(a.tau_nom/(np.mean(a.tau_hr)*2) * 100) ))
-ax.plot(d["runtime"], d["min"].values, label = "maximum effieiency (estimated)")
-
-
-
-ax.set_xlabel("time (sec)")
-ax.set_ylabel("CO2 (normalized)")
-
-ax.set_title("Decay curves for {}".format(a.experiment))
-ax.legend()
+# result_wall.columns = ["experiment", "temp_°C", "std"] 
 
 
 #%%
@@ -397,14 +717,5 @@ ax.legend()
 
 
 
-
-#%%
-
-
-
-
-
-
-#%%
 
 
