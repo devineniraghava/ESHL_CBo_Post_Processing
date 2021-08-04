@@ -61,14 +61,18 @@ class CBO_ESHL:
         self.experiment = experiment
         self.sensor_name = sensor_name
         self.column_name = column_name
-        # self.engine = create_engine("mysql+pymysql://wojtek:Password#102@wojtek.mysql.database.azure.com/",pool_pre_ping=True)
-        self.engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
+        self.engine = create_engine("mysql+pymysql://wojtek:Password#102@wojtek.mysql.database.azure.com/",pool_pre_ping=True)
+        # self.engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
 
         self.database = self.times[self.times["experiment"] == self.experiment].iloc[0,3]
         self.t0 = self.times[self.times["experiment"] == experiment].iloc[0,1]
         self.tn = self.times[self.times["experiment"] == experiment].iloc[0,2]
         self.exclude = self.times[self.times["experiment"] == experiment].iloc[0,4].split(",")
+        
         self.calibration = self.times[self.times["experiment"] == experiment].iloc[0,5]
+        self.engine1 = create_engine("mysql+pymysql://wojtek:Password#102@wojtek.mysql.database.azure.com/{}".format(self.calibration),pool_pre_ping=True)
+        # self.engine1 = create_engine("mysql+pymysql://root:Password123@localhost/{}".format(self.calibration),pool_pre_ping=True)
+
         self.wall_database = self.times[self.times["experiment"] == experiment].iloc[0,6]
         self.testos = ["1a_testo","2a_testo","3a_testo","4a_testo"]
         
@@ -183,14 +187,12 @@ class CBO_ESHL:
             There are two time periods where calibration was done and this
             '''
 
-            engine1 = create_engine("mysql+pymysql://root:Password123@localhost/{}".format(self.calibration),pool_pre_ping=True)
-
             
             '''standard syntax to import sql data as dataframe
             self.engine is measurement campagin experimentl data and engine1 is calibration data'''
 
             '''Calibration data is imported '''
-            reg_result = pd.read_sql_table("reg_result", con = engine1).drop("index", axis = 1)
+            reg_result = pd.read_sql_table("reg_result", con = self.engine1).drop("index", axis = 1)
             '''Calibration data for the particular sensor alone is filtered '''
             res = reg_result[reg_result['sensor'].str.lower() == "außen"].reset_index(drop = True)
             
@@ -362,8 +364,7 @@ class CBO_ESHL:
         for self.table in self.new_names:
             self.cdf1 = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database, self.table, self.t0, self.tn), con = self.engine) 
             self.cdf2 = self.cdf1.loc[:,["datetime", "CO2_ppm"]]
-            engine1 = create_engine("mysql+pymysql://root:Password123@localhost/{}".format(self.calibration),pool_pre_ping=True)
-            self.reg_result = pd.read_sql_table("reg_result", con = engine1).drop("index", axis = 1)
+            self.reg_result = pd.read_sql_table("reg_result", con = self.engine1).drop("index", axis = 1)
             '''Calibration data for the particular sensor alone is filtered '''
             self.res = self.reg_result[self.reg_result['sensor'].str.lower() == self.table].reset_index(drop = True)
             
@@ -752,7 +753,7 @@ index = a.times["experiment"].to_list()
 
 df = pd.DataFrame(daten, columns = columns, index = index)
 
-
+df.to_excel("indoor_outdoor_results.xlsx")
 
 
 
