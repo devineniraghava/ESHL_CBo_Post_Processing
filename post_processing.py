@@ -28,7 +28,7 @@ engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_pi
 #%%
 
 class CBO_ESHL:
-    
+  
     def __init__(self, experiment = "S_I_e0_ESHL", sensor_name = "1a_testo", column_name = 'hw_m/sec'):
         
         """
@@ -56,7 +56,7 @@ class CBO_ESHL:
                 The nominal time constant of the measurement obtained from 
                 master_time_sheet.xlsx
         """
-        excel_sheet = "C:/Users/Raghavakrishna/OneDrive - bwedu/5_PythonFiles/ESHL_CBo_Post_Processing/master_time_sheet.xlsx"
+        excel_sheet = "master_time_sheet.xlsx"
         self.times = pd.read_excel(excel_sheet, sheet_name = "Sheet1")
         self.input = pd.read_excel(excel_sheet, sheet_name = "inputs")
         self.experiment = experiment
@@ -291,7 +291,7 @@ class CBO_ESHL:
                     
                     host.legend(lines, [l.get_label() for l in lines])
                     if save:
-                        plt.savefig('{} outdoor data (HOBO)'.format(self.experiemnt), bbox_inches='tight', dpi=400)
+                        plt.savefig('{} outdoor data (HOBO)'.format(self.experiment), bbox_inches='tight', dpi=400)
                 
                     plt.show()
                 """
@@ -575,15 +575,23 @@ class CBO_ESHL:
         
         
         self.humidity = []
+        self.temp = []
     
         for i in self.new_names:
+            print(i)
             self.hudf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database,i,self.t0,self.tn), con = engine).set_index("datetime").dropna()
             if 'RH_%rH' in self.hudf.columns:
                 self.humidity.append(self.hudf["RH_%rH"].mean())
-        self.humidity = [x for x in self.humidity if x == x]
+            if 'temp_°C' in self.hudf.columns:
+                self.temp.append(self.hudf["temp_°C"].mean())
+        self.humidity = [x for x in self.humidity if x == x] 
+        self.temp = [x for x in self.temp if x == x] # to remove nans
         self.indoor_list = [[statistics.mean(self.humidity), statistics.stdev(self.humidity), max(self.humidity), min(self.humidity)]]
         
+        self.indoor_list.append([statistics.mean(self.temp), statistics.stdev(self.temp), max(self.temp), min(self.temp)])
+        
         for i in self.testos:
+            
             sdf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database.lower(),i,self.t0,self.tn), con = engine)
 
             sdf = sdf.drop_duplicates(subset="datetime").set_index("datetime")
@@ -595,7 +603,7 @@ class CBO_ESHL:
         self.indoor_list.append([self.wadf.mean().mean(), self.wadf.values.std(ddof=1), self.wadf.values.max(), self.wadf.values.min()])
 
         
-        self.indoor_summary = pd.DataFrame(data = self.indoor_list, index = ["RH_%rH", "hw_m/sec", "wall_temp_°C"], columns = ["mean", "std", "max", "min"] )
+        self.indoor_summary = pd.DataFrame(data = self.indoor_list, index = ["RH_%rH", "temp_°C", "hw_m/sec", "wall_temp_°C"], columns = ["mean", "std", "max", "min"] )
 
         return self.indoor_summary
         
@@ -669,6 +677,7 @@ class CBO_ESHL:
 """
 
 a = CBO_ESHL("S_I_e0_ESHL" )
+a.indoor_data()
 # x = a.decay_curve_comparison_plot()
 # print(a.wind_velocity_indoor())
 # print(a.wind_velocity_outdoor())
