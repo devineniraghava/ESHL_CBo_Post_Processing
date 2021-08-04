@@ -22,7 +22,6 @@ import matplotlib.units as munits
 
 def prRed(skk): print("\033[31;1;m {}\033[00m" .format(skk))
 def prYellow(skk): print("\033[33;1;m {}\033[00m" .format(skk))
-engine = create_engine("mysql+pymysql://root:Password123@localhost/",pool_pre_ping=True)
 
 
 #%%
@@ -545,8 +544,8 @@ class CBO_ESHL:
             experiment period
 
         """
-        adf = pd.read_sql_query("SELECT * FROM weather.außen WHERE datetime BETWEEN '{}' AND '{}'".format(self.t0,self.tn), con = engine).drop("index", axis = 1).set_index("datetime")
-        wdf = pd.read_sql_query("SELECT * FROM weather.weather_all WHERE datetime BETWEEN '{}' AND '{}'".format(self.t0,self.tn), con = engine).set_index("datetime")
+        adf = pd.read_sql_query("SELECT * FROM weather.außen WHERE datetime BETWEEN '{}' AND '{}'".format(self.t0,self.tn), con = self.engine).drop("index", axis = 1).set_index("datetime")
+        wdf = pd.read_sql_query("SELECT * FROM weather.weather_all WHERE datetime BETWEEN '{}' AND '{}'".format(self.t0,self.tn), con = self.engine).set_index("datetime")
 
         
         
@@ -579,7 +578,7 @@ class CBO_ESHL:
     
         for i in self.new_names:
             print(i)
-            self.hudf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database,i,self.t0,self.tn), con = engine).set_index("datetime").dropna()
+            self.hudf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database,i,self.t0,self.tn), con = self.engine).set_index("datetime").dropna()
             if 'RH_%rH' in self.hudf.columns:
                 self.humidity.append(self.hudf["RH_%rH"].mean())
             if 'temp_°C' in self.hudf.columns:
@@ -592,13 +591,13 @@ class CBO_ESHL:
         
         for i in self.testos:
             
-            sdf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database.lower(),i,self.t0,self.tn), con = engine)
+            sdf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database.lower(),i,self.t0,self.tn), con = self.engine)
 
             sdf = sdf.drop_duplicates(subset="datetime").set_index("datetime")
             sdf = sdf.loc[:,["hw_m/sec"]].dropna()
         self.indoor_list.append([sdf["hw_m/sec"].mean(), sdf["hw_m/sec"].std(), sdf["hw_m/sec"].max(), sdf["hw_m/sec"].min()])
         
-        self.wadf = pd.read_sql_query("SELECT * FROM weather.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.wall_database,self.t0,self.tn), con = engine).set_index("datetime")
+        self.wadf = pd.read_sql_query("SELECT * FROM weather.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.wall_database,self.t0,self.tn), con = self.engine).set_index("datetime")
 
         self.indoor_list.append([self.wadf.mean().mean(), self.wadf.values.std(ddof=1), self.wadf.values.max(), self.wadf.values.min()])
 
@@ -678,6 +677,8 @@ class CBO_ESHL:
 
 a = CBO_ESHL("S_I_e0_ESHL" )
 a.indoor_data()
+a.outdoor_data()
+
 # x = a.decay_curve_comparison_plot()
 # print(a.wind_velocity_indoor())
 # print(a.wind_velocity_outdoor())
