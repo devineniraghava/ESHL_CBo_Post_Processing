@@ -592,10 +592,10 @@ class CBO_ESHL:
         for i in self.testos:
             
             sdf = pd.read_sql_query("SELECT * FROM {}.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.database.lower(),i,self.t0,self.tn), con = self.engine)
-
-            sdf = sdf.drop_duplicates(subset="datetime").set_index("datetime")
-            sdf = sdf.loc[:,["hw_m/sec"]].dropna()
-        self.indoor_list.append([sdf["hw_m/sec"].mean(), sdf["hw_m/sec"].std(), sdf["hw_m/sec"].max(), sdf["hw_m/sec"].min()])
+            if not(sdf.empty):
+                self.sdf = sdf.drop_duplicates(subset="datetime").set_index("datetime")
+                self.sdf = self.sdf.loc[:,["hw_m/sec"]].dropna()
+        self.indoor_list.append([self.sdf["hw_m/sec"].mean(), self.sdf["hw_m/sec"].std(), self.sdf["hw_m/sec"].max(), self.sdf["hw_m/sec"].min()])
         
         self.wadf = pd.read_sql_query("SELECT * FROM weather.{} WHERE datetime BETWEEN '{}' AND '{}'".format(self.wall_database,self.t0,self.tn), con = self.engine).set_index("datetime")
 
@@ -676,23 +676,21 @@ class CBO_ESHL:
 """
 
 a = CBO_ESHL("S_H_e1_Herdern" )
-indoor = a.indoor_data()
-outdoor = a.outdoor_data()
+# indoor = a.indoor_data()
+# outdoor = a.outdoor_data()
 
-indoor_temp = ufloat(indoor.loc["temp_°C", "mean"], indoor.loc["temp_°C", "std"])
-outdoor_temp = ufloat(outdoor.loc["temp_°C", "mean"], outdoor.loc["temp_°C", "std"])
-wall_temp = ufloat(indoor.loc["wall_temp_°C", "mean"], indoor.loc["wall_temp_°C", "std"])
-indoor_rh = ufloat(indoor.loc["RH_%rH", "mean"], indoor.loc["RH_%rH", "std"])
-indoor_wind_speed = ufloat(indoor.loc["hw_m/sec", "mean"], indoor.loc["hw_m/sec", "std"])
+# indoor_temp = ufloat(indoor.loc["temp_°C", "mean"], indoor.loc["temp_°C", "std"])
+# outdoor_temp = ufloat(outdoor.loc["temp_°C", "mean"], outdoor.loc["temp_°C", "std"])
+# wall_temp = ufloat(indoor.loc["wall_temp_°C", "mean"], indoor.loc["wall_temp_°C", "std"])
+# indoor_rh = ufloat(indoor.loc["RH_%rH", "mean"], indoor.loc["RH_%rH", "std"])
+# indoor_wind_speed = ufloat(indoor.loc["hw_m/sec", "mean"], indoor.loc["hw_m/sec", "std"])
 
-outdoor_wind_speed = ufloat(outdoor.loc["Wind Speed, m/s", "mean"], outdoor.loc["Wind Speed, m/s", "std"])
-outdoor_gust_speed = ufloat(outdoor.loc["Gust Speed, m/s", "mean"], outdoor.loc["Gust Speed, m/s", "std"])
-outdoor_wind_direction = ufloat(outdoor.loc["Wind Direction", "mean"], outdoor.loc["Wind Direction", "std"])
-outdoor_rh = ufloat(outdoor.loc["RH_%rH", "mean"], outdoor.loc["RH_%rH", "std"])
-outdoor_temp_weather = ufloat(outdoor.loc["Temperature °C", "mean"], outdoor.loc["Temperature °C", "std"])
-outdoor_rh_weather = ufloat(outdoor.loc["RH %", "mean"], outdoor.loc["RH %", "std"])
-
-
+# outdoor_wind_speed = ufloat(outdoor.loc["Wind Speed, m/s", "mean"], outdoor.loc["Wind Speed, m/s", "std"])
+# outdoor_gust_speed = ufloat(outdoor.loc["Gust Speed, m/s", "mean"], outdoor.loc["Gust Speed, m/s", "std"])
+# outdoor_wind_direction = ufloat(outdoor.loc["Wind Direction", "mean"], outdoor.loc["Wind Direction", "std"])
+# outdoor_rh = ufloat(outdoor.loc["RH_%rH", "mean"], outdoor.loc["RH_%rH", "std"])
+# outdoor_temp_weather = ufloat(outdoor.loc["Temperature °C", "mean"], outdoor.loc["Temperature °C", "std"])
+# outdoor_rh_weather = ufloat(outdoor.loc["RH %", "mean"], outdoor.loc["RH %", "std"])
 
 
 
@@ -702,55 +700,57 @@ outdoor_rh_weather = ufloat(outdoor.loc["RH %", "mean"], outdoor.loc["RH %", "st
 
 
 
-delta_t = outdoor_temp - indoor_temp
-delta_t_weather = outdoor_temp_weather - indoor_temp
+
+
+# delta_t = outdoor_temp - indoor_temp
+# delta_t_weather = outdoor_temp_weather - indoor_temp
 
 
 
-data = [[delta_t, outdoor_temp, indoor_temp, wall_temp, indoor_rh, indoor_wind_speed, outdoor_wind_speed, outdoor_gust_speed, outdoor_wind_direction, outdoor_rh, outdoor_temp_weather, outdoor_rh_weather, delta_t_weather ]]
+# data = [[delta_t, outdoor_temp, indoor_temp, wall_temp, indoor_rh, indoor_wind_speed, outdoor_wind_speed, outdoor_gust_speed, outdoor_wind_direction, outdoor_rh, outdoor_temp_weather, outdoor_rh_weather, delta_t_weather ]]
 
-columns = ["delta_out_in_temp_°C", "outdoor_temp_°C", "indoor_temp_°C", "wall_temp_°C", "indoor_RH_%rH", "hw_m/sec", 'Wind Speed, m/s', 'Gust Speed, m/s', 'Wind Direction', "outdoor_RH_%rH", "outdoor_temp_weather_°C", "outdoor_RH_weather_%rH", "delta_weaatherout_in_temp_°C" ]
-index = [a.experiment]
+# columns = ["delta_out_in_temp_°C", "outdoor_temp_°C", "indoor_temp_°C", "wall_temp_°C", "indoor_RH_%rH", "hw_m/sec", 'Wind Speed, m/s', 'Gust Speed, m/s', 'Wind Direction', "outdoor_RH_%rH", "outdoor_temp_weather_°C", "outdoor_RH_weather_%rH", "delta_weaatherout_in_temp_°C" ]
+# index = [a.experiment]
 
-df = pd.DataFrame(data, columns = columns, index = index)
-prYellow(a.experiment)
+# df = pd.DataFrame(data, columns = columns, index = index)
+# prYellow(a.experiment)
 
 #%% Loop
-# daten = []
-# for i in a.times["experiment"].to_list():
-#     prYellow(i)
-#     a = CBO_ESHL(i)
-#     indoor = a.indoor_data()
-#     outdoor = a.outdoor_data()
+daten = []
+for i in a.times["experiment"].to_list():
+    prYellow(i)
+    a = CBO_ESHL(i)
+    indoor = a.indoor_data()
+    outdoor = a.outdoor_data()
     
-#     indoor_temp = ufloat(indoor.loc["temp_°C", "mean"], indoor.loc["temp_°C", "std"])
-#     outdoor_temp = ufloat(outdoor.loc["temp_°C", "mean"], outdoor.loc["temp_°C", "std"])
-#     wall_temp = ufloat(indoor.loc["wall_temp_°C", "mean"], indoor.loc["wall_temp_°C", "std"])
-#     indoor_rh = ufloat(indoor.loc["RH_%rH", "mean"], indoor.loc["RH_%rH", "std"])
-#     indoor_wind_speed = ufloat(indoor.loc["hw_m/sec", "mean"], indoor.loc["hw_m/sec", "std"])
+    indoor_temp = ufloat(indoor.loc["temp_°C", "mean"], indoor.loc["temp_°C", "std"])
+    outdoor_temp = ufloat(outdoor.loc["temp_°C", "mean"], outdoor.loc["temp_°C", "std"])
+    wall_temp = ufloat(indoor.loc["wall_temp_°C", "mean"], indoor.loc["wall_temp_°C", "std"])
+    indoor_rh = ufloat(indoor.loc["RH_%rH", "mean"], indoor.loc["RH_%rH", "std"])
+    indoor_wind_speed = ufloat(indoor.loc["hw_m/sec", "mean"], indoor.loc["hw_m/sec", "std"])
     
-#     outdoor_wind_speed = ufloat(outdoor.loc["Wind Speed, m/s", "mean"], outdoor.loc["Wind Speed, m/s", "std"])
-#     outdoor_gust_speed = ufloat(outdoor.loc["Gust Speed, m/s", "mean"], outdoor.loc["Gust Speed, m/s", "std"])
-#     outdoor_wind_direction = ufloat(outdoor.loc["Wind Direction", "mean"], outdoor.loc["Wind Direction", "std"])
-#     outdoor_rh = ufloat(outdoor.loc["RH_%rH", "mean"], outdoor.loc["RH_%rH", "std"])
-#     outdoor_temp_weather = ufloat(outdoor.loc["Temperature °C", "mean"], outdoor.loc["Temperature °C", "std"])
-#     outdoor_rh_weather = ufloat(outdoor.loc["RH %", "mean"], outdoor.loc["RH %", "std"])
+    outdoor_wind_speed = ufloat(outdoor.loc["Wind Speed, m/s", "mean"], outdoor.loc["Wind Speed, m/s", "std"])
+    outdoor_gust_speed = ufloat(outdoor.loc["Gust Speed, m/s", "mean"], outdoor.loc["Gust Speed, m/s", "std"])
+    outdoor_wind_direction = ufloat(outdoor.loc["Wind Direction", "mean"], outdoor.loc["Wind Direction", "std"])
+    outdoor_rh = ufloat(outdoor.loc["RH_%rH", "mean"], outdoor.loc["RH_%rH", "std"])
+    outdoor_temp_weather = ufloat(outdoor.loc["Temperature °C", "mean"], outdoor.loc["Temperature °C", "std"])
+    outdoor_rh_weather = ufloat(outdoor.loc["RH %", "mean"], outdoor.loc["RH %", "std"])
     
-#     delta_t = outdoor_temp - indoor_temp
-#     delta_t_weather = outdoor_temp_weather - indoor_temp
+    delta_t = outdoor_temp - indoor_temp
+    delta_t_weather = outdoor_temp_weather - indoor_temp
     
     
     
-#     data = [delta_t, outdoor_temp, indoor_temp, wall_temp, indoor_rh, indoor_wind_speed, outdoor_wind_speed, outdoor_gust_speed, outdoor_wind_direction, outdoor_rh, outdoor_temp_weather, outdoor_rh_weather, delta_t_weather ]
+    data = [delta_t, outdoor_temp, indoor_temp, wall_temp, indoor_rh, indoor_wind_speed, outdoor_wind_speed, outdoor_gust_speed, outdoor_wind_direction, outdoor_rh, outdoor_temp_weather, outdoor_rh_weather, delta_t_weather ]
 
-#     daten.append(data)
+    daten.append(data)
 
 
-# #%%%
-# columns = ["delta_out_in_temp_°C", "outdoor_temp_°C", "indoor_temp_°C", "wall_temp_°C", "indoor_RH_%rH", "hw_m/sec", 'Wind Speed, m/s', 'Gust Speed, m/s', 'Wind Direction', "outdoor_RH_%rH", "outdoor_temp_weather_°C", "outdoor_RH_weather_%rH", "delta_weaatherout_in_temp_°C" ]
-# index = a.times["experiment"].to_list()
+#%%%
+columns = ["delta_out_in_temp_°C", "outdoor_temp_°C", "indoor_temp_°C", "wall_temp_°C", "indoor_RH_%rH", "hw_m/sec", 'Wind Speed, m/s', 'Gust Speed, m/s', 'Wind Direction', "outdoor_RH_%rH", "outdoor_temp_weather_°C", "outdoor_RH_weather_%rH", "delta_weaatherout_in_temp_°C" ]
+index = a.times["experiment"].to_list()
 
-# df = pd.DataFrame(daten, columns = columns, index = index)
+df = pd.DataFrame(daten, columns = columns, index = index)
 
 
 
