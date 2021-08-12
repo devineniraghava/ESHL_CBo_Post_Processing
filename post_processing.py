@@ -742,7 +742,7 @@ class CBO_ESHL:
     Cheers
 """
 
-a = CBO_ESHL("W_H_e1_ESHL" )
+a = CBO_ESHL("S_I_e1_ESHL" )
 x = a.volume_flow()
 
 #%% Loop for all 
