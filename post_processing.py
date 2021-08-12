@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.units as munits
 
-# from uncertainties import ufloat
+from uncertainties import ufloat
 
 def prRed(skk): print("\033[31;1;m {}\033[00m" .format(skk))
 def prYellow(skk): print("\033[33;1;m {}\033[00m" .format(skk))
@@ -82,11 +82,38 @@ class CBO_ESHL:
         self.tau_nom = self.input.loc[self.input["experiment"] == self.experiment]["tau_nom"].iat[0]                             
     
     
-    def volume_flow(self):
+    def volume_flow(self, sheet = "ESHL_Vdot", level_eshl = "WZ_100", level_cbo = "K1_St5" ):
         self.vf = self.times[self.times["experiment"] == self.experiment].iloc[0,7]
         self.vf_std = self.times[self.times["experiment"] == self.experiment].iloc[0,8]
         
-        return self.vf, self.vf_std
+        if "eshl" in self.database:
+            sheet = "ESHL_Vdot"
+            self.level = level_eshl
+            df = pd.read_excel("Vdot_results.xlsx", sheet_name = sheet)
+            self.vdot_sup = df.loc[df["Level"] == self.level].iat[0,1]
+            self.vdot_sup_std = df.loc[df["Level"] == self.level].iat[0,2]
+            
+            self.vdot_exh = abs(df.loc[df["Level"] == self.level].iat[0,3])
+            self.vdot_exh_std = df.loc[df["Level"] == self.level].iat[0,4]
+            print(self.level)
+        else:
+            sheet = "CBo_Vdot"
+            self.level = level_cbo
+
+            df = pd.read_excel("Vdot_results.xlsx", sheet_name = sheet)
+            self.vdot_sup = df.loc[df["Level"] == self.level].iat[0,1]
+            self.vdot_sup_std = df.loc[df["Level"] == self.level].iat[0,2]
+            
+            self.vdot_exh = abs(df.loc[df["Level"] == self.level].iat[0,3])
+            self.vdot_exh_std = df.loc[df["Level"] == self.level].iat[0,4]
+            print(self.level)
+        
+        data = [[self.experiment, self.vf, self.vf_std, self.level , self.vdot_sup, self.vdot_sup_std, self.vdot_exh, self.vdot_exh_std]]
+        columns = ["experiment", "volume_flow", "volume_flow_std","level", "vdot_sup", "vdot_sup_std", "vdot_exh", "vdot_exh_std"]
+        index = ["0"]
+        self.volume_flows = pd.DataFrame(data, columns=columns, index = index)
+        
+        return self.volume_flows
     
     
     def wind_velocity_indoor(self):
@@ -715,8 +742,8 @@ class CBO_ESHL:
     Cheers
 """
 
-a = CBO_ESHL("S_H_e1_Herdern" )
-x = a.mean_curve()
+a = CBO_ESHL("W_H_e1_ESHL" )
+x = a.volume_flow()
 
 #%% Loop for all 
 # =============================================================================
