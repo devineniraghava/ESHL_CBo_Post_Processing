@@ -82,7 +82,7 @@ class CBO_ESHL:
         self.tau_nom = self.input.loc[self.input["experiment"] == self.experiment]["tau_nom"].iat[0]                             
     
     
-    def volume_flow(self, sheet = "ESHL_Vdot", level_eshl = "WZ_100", level_cbo = "K1_St5" ):
+    def volume_flow(self,  level_eshl = "WZ_100", level_cbo = "K1_St5" ):
         self.vf = self.times[self.times["experiment"] == self.experiment].iloc[0,7]
         self.vf_std = self.times[self.times["experiment"] == self.experiment].iloc[0,8]
         
