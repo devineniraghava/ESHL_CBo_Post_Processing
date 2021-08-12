@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.units as munits
 
-from uncertainties import ufloat
+# from uncertainties import ufloat
 
 def prRed(skk): print("\033[31;1;m {}\033[00m" .format(skk))
 def prYellow(skk): print("\033[33;1;m {}\033[00m" .format(skk))
@@ -80,7 +80,15 @@ class CBO_ESHL:
         self.tn_20 = self.tn + timedelta(minutes = 20)   
 
         self.tau_nom = self.input.loc[self.input["experiment"] == self.experiment]["tau_nom"].iat[0]                             
+    
+    
+    def volume_flow(self):
+        self.vf = self.times[self.times["experiment"] == self.experiment].iloc[0,7]
+        self.vf_std = self.times[self.times["experiment"] == self.experiment].iloc[0,8]
         
+        return self.vf, self.vf_std
+    
+    
     def wind_velocity_indoor(self):
         """
         Prints the person's name and age.
